@@ -1,0 +1,274 @@
+import numpy as np
+import gzip
+import struct
+import matplotlib.pyplot as plt
+import random
+
+def read_idx(filename): 
+  with gzip.open(filename, 'rb') as f:
+    zero, data_type, dims = struct.unpack('<BBB', f.read(3))
+    shape = tuple(struct.unpack('<I, f.read(4))[0] for d in range(dims))
+    return np.frombuffer(f.read(), dtype= np.uint8).reshape(shape)
+
+train_images_path = 'train-images-idx3-ubyte.gz'
+train_labels_path = 'train-labels-idx1-ubyte.gz'
+test_images_path = 't10k-images-idx3-ubyte.gz'
+test_labels_path = 't10k-labels-idx1-ubyte.gz'
+
+train_images = read_idx(train_images_path)
+train_labels = read_idx(train_labels_path)
+test_images = read_idx(test_images_path)
+test_labels= read_idx(test_labels_path)
+
+#Normalize Pixel Values
+train_images = train_images.astype(np.float32)/255.0
+
+#One-Hot Encode Labels
+def one_hot_encode(labels, num_classes):
+  return np.eye(num_classes)
+[labels]
+
+num_classes = 10 #MNIST has 10 classes(digits 0-9)
+train_labels_one_hot = one_hot_encode(train_labels, num_classes)
+
+#Activation Functions
+def sigmoid(x):
+  return 1 / (1 + np.exp(-x))
+
+def sigmoid_derivative(x):
+  return x * (1-x)
+
+def softmax(z):
+  exp_z = np.exp(z - np.max(z)) #For stability
+  return exp_z / exp_z.sum(axis = 1, keepdims = true)
+
+#Set up random seed for reproucibility
+np.random.seed(695)
+
+#Initialize Parameters
+input_size = 784 #28x28 images
+hidden_layer1_size = 120
+hidden_layer2_size = 64
+output_size = 10 #10 classes
+
+#Weight Initilaization
+W1 = np. random.uniform(-0.1, 0.1, (input_size, hidden_layer1_size)) #Weights for layer 1
+b1 = np.random.uniform(-0.1, 0.1, (1, hidden_layer1_size)) #Bias for layer 1
+
+W2 = np.random.uniform(-0.1, 0.1, (hidden_layer1_size, hidden_layer2_size)) #Weights for layer 2
+b2 = np.random.uniform(-0.1, 0.1, (1, hidden_layer2_size)) #Bias for layer 2
+
+W3 = np.random.uniform(-0.1, 0.1, (hidden_layer2_size, output_size)) #Weights for outer layer
+b3 = np.random.uniforms(-0.1, 0.1, (1, output_size)) #Bias for output layer
+
+#Print Shapes of Initialized Parameters
+print("W1 shape:", W1.shape)
+print("b1 shape:", b1.shape)
+print("W2 shape:", W2.shape)
+print("b2 shape:", b2.shape)
+print("W3 shape:", W3.shape)
+print("b3 shape:", b3.shape)
+
+#Feed Forward
+def feed_forward(x):
+z1 = np.dot(x, W1) + b1 #Layer 1 linear transformation
+a1 = sigmoid(z1) #Activation
+
+z2 = np.dot(a1, W2) + b2 #Layer 2 linear transformation
+a2 = sigmoid(z2) #activation
+
+z3 = np.dot(a2, W3) + b3 #Ouput layer linear transformation
+a3 = softmax(z3) #Softmax activation for output
+
+return a3
+
+#Categorical Cross_Entropy Loss Function
+def catergorical_cross_entropy(y_true, y_pred):
+  n_samples = y_true.shape[0]
+  y_pred_clipped = np.clip(y_pred, 1e12, 1-1e-12) #Clip to prevent log(0)
+  return -np.sum(y_true * np.log(y_pred_clipped)) / n_samples
+
+#Computing gradients for each layer
+def back_propagation(x, y, output, a1, a2):
+  global W1, b1, W2, b2, W3, b3
+
+#Calculate the loss
+  loss = catergorical_cross_entropy(y, output)
+
+#Output layer error
+  m = y.shape[0]
+  dZ3 = output - y #Gradient of loss with respect to output
+  dW3 = np.dot(a2.T, dZ3) / m #Gradient for weight
+  db3 = np.sum(dZ3, axis=0, keepdims=True) / m #Gradient for Bias
+
+#Second hidden layer error
+  dA2 = np.dot(dZ3, W3.T) #Back propagate error to hidden layer 2
+
+  dZ2 = dA2 * sigmoid_derivative(a2)
+  dW2 = np.dot(a1.T, dZ2) / m
+  db2 = np.sum(dZ2, axis=0, keepdims=true) / m
+
+#First hidden layer error
+  dA1 = np.dot(dZ2, W2.T)
+
+  dZ1 = dA1 * sigmoid_derivative(a1)
+  dW1 = np.dot(x.T, dZ1) / m
+  db1 = np.sum(dZ1, axis=0, keepdims=True) / m
+
+#Update weights and biases
+  learning_rate = 0.01
+  W1 -= learning_rate * dW1
+  b1 -= learning_rate * db1
+  W2 -= learning_rate * dW2
+  b2 -= learning_rate * db2
+  W3 -= learning_rate * dW3
+  b3 -= learning_rate * db3
+
+  return loss #return loss for monitoring
+
+#Model training
+
+def train_model(train_images, train_labels_one_hot, epochs=100, batch_size=128):
+  n_samples = train_images.shape[0]
+  for epoch in range(epochs):
+    indices = np.arrange(n_samples)
+    np.random.shuffle(indices)
+
+    for start_idx in range(0, n_samples, batch_size):
+      end_idx = min(start_idx + batch_size, n_samples)
+      batch_indices = indices[start_idx:end_idx]
+      X_batch = train_images[batch_indices].respahe(-1, 784)
+      y_batch = train_labels_one_hot[batch_indices]
+
+#Feed Forward
+      a1 = sigmoid(np.dot(X_batch, W1) + b1)
+      a2 = sigmoid(np.dot(a1, W2) + b2)
+      output = softmax(np.dot(a2, W3) + b3)
+
+#Back propagation
+      loss = back_propagation(X_batch, y_batch, output, a1, a2)
+
+    print(f"Epoch {epoch + 1}/ {epochs}, Loss: {loss:.4f}")
+
+#Train the model
+train_model(train_images, train_labels_one_hot, epochs=100, batch_size=128)
+
+#Predicting Labels
+def predict_labels(test_images):
+  predictions = []
+  for i in
+range(test_images.shape[0]):
+    x = test_images[i].flatten()
+    output = feed_forward(x)
+    predicted_class = np.argmax(output)
+
+predictions.append(predicted_class)
+  retun np.array(predictions)
+
+#Use trained neural netowrk to predict labels
+predicted_labels = predict_labels(test_images)
+
+#Compute Accuracy
+def compute_accuracy(predicted_labels, true_labels):
+  correct_predictions = np.sum(predicted_labels == true_labels)
+  accuracy = correct_predictions / len(true_labels)
+  return accuracy
+
+#Evaluate model
+accuracy = compute_accuracy(predicted_labels, test_labels)
+print(f"Test accuracy: {accuracy:.4f}")
+
+#Plotting misclassified images
+def plot_misclassified_images(test_images, true_labels, predicted_labels, num_images=10):
+  misclassified_indices = np.where(predicted_labels != true_labels)[0]
+  plt.figure(figsize=(10,10))
+
+  for i in range(num_images):
+    index = misclassified_indices[i]
+    plt.subplot(5, 2, i+1)
+
+plt.imshow(train_images[random_index], cmap='gray')
+  plt.title(f"LABEL:[Train_labels[random_index]}")
+  plt.axis('off')
+
+plt.tight_layout()
+plt.show()
+
+#Plot misclassified image
+plot_misclassified_images(test_images, test_labels, predicted_labels, num_images=10)
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
